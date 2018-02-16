@@ -66,7 +66,29 @@ public interface ConsumerInterceptor<K, V> extends Configurable {
     public ConsumerRecords<K, V> onConsume(ConsumerRecords<K, V> records);
 
     /**
-     * This is called when offsets get committed.
+     * This is called after committed offsets are read.
+     * <p>
+     * Any exception thrown by this method will be ignored by the caller.
+     *
+     * @param consumer the consumer object
+     * @param offsets A map of offsets by partition with associated metadata.
+     *                The offsets can be modified before being used to seek to.
+     */
+    public void onFetch(Consumer consumer, Map<TopicPartition, OffsetAndMetadata> offsets);
+
+    /**
+     * This is called before offsets are committed.
+     * <p>
+     * Any exception thrown by this method will be ignored by the caller.
+     *
+     * @param consumer the consumer object
+     * @param offsets A map of offsets by partition with associated metadata.
+     *                The offsets can be modified before being committed.
+     */
+    public void preCommit(Consumer consumer, Map<TopicPartition, OffsetAndMetadata> offsets);
+
+    /**
+     * This is called after offsets get committed.
      * <p>
      * Any exception thrown by this method will be ignored by the caller.
      *

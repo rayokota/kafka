@@ -18,6 +18,7 @@ package org.apache.kafka.clients.consumer.internals;
 
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.consumer.CommitFailedException;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.consumer.OffsetCommitCallback;
@@ -65,6 +66,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class ConsumerCoordinator extends AbstractCoordinator {
     private final Logger log;
+    private final Consumer consumer;
     private final List<PartitionAssignor> assignors;
     private final Metadata metadata;
     private final ConsumerCoordinatorMetrics sensors;
@@ -90,6 +92,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
      * Initialize the coordination manager.
      */
     public ConsumerCoordinator(LogContext logContext,
+                               Consumer consumer,
                                ConsumerNetworkClient client,
                                String groupId,
                                int rebalanceTimeoutMs,
@@ -119,6 +122,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
               retryBackoffMs,
               leaveGroupOnClose);
         this.log = logContext.logger(ConsumerCoordinator.class);
+        this.consumer = consumer;
         this.metadata = metadata;
         this.metadataSnapshot = new MetadataSnapshot(subscriptions, metadata.fetch());
         this.subscriptions = subscriptions;
@@ -468,14 +472,21 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
             RequestFuture<Map<TopicPartition, OffsetAndMetadata>> future = sendOffsetFetchRequest(partitions);
             client.poll(future);
 
-            if (future.succeeded())
-                return future.value();
+            if (future.succeeded()) {
+                Map<TopicPartition, OffsetAndMetadata> offsets = future.value();
+
+                if (interceptors != null)
+                    interceptors.onFetch(consumer, offsets);
+
+                return offsets;
+            }
 
             if (!future.isRetriable())
                 throw future.exception();
 
             time.sleep(retryBackoffMs);
         }
+
     }
 
     public void close(long timeoutMs) {
@@ -681,6 +692,9 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
      * @return A request future whose value indicates whether the commit was successful or not
      */
     private RequestFuture<Void> sendOffsetCommitRequest(final Map<TopicPartition, OffsetAndMetadata> offsets) {
+        if (interceptors != null)
+            interceptors.preCommit(consumer, offsets);
+
         if (offsets.isEmpty())
             return RequestFuture.voidSuccess();
 

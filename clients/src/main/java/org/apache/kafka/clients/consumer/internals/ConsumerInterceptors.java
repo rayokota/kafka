@@ -17,6 +17,7 @@
 package org.apache.kafka.clients.consumer.internals;
 
 
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerInterceptor;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -68,7 +69,47 @@ public class ConsumerInterceptors<K, V> implements Closeable {
     }
 
     /**
-     * This is called when commit request returns successfully from the broker.
+     * This is called after committed offsets are fetched from the broker.
+     * <p>
+     * This method calls {@link ConsumerInterceptor#onFetch(Consumer, Map)} method for each interceptor.
+     * <p>
+     * This method does not throw exceptions. Exceptions thrown by any of the interceptors in the chain are logged, but not propagated.
+     *
+     * @param offsets A map of offsets by partition with associated metadata
+     */
+    public void onFetch(Consumer consumer, Map<TopicPartition, OffsetAndMetadata> offsets) {
+        for (ConsumerInterceptor<K, V> interceptor : this.interceptors) {
+            try {
+                interceptor.onFetch(consumer, offsets);
+            } catch (Exception e) {
+                // do not propagate interceptor exception, just log
+                log.warn("Error executing interceptor onFetch callback", e);
+            }
+        }
+    }
+
+    /**
+     * This is called before commit request returns successfully from the broker.
+     * <p>
+     * This method calls {@link ConsumerInterceptor#preCommit(Consumer, Map)} method for each interceptor.
+     * <p>
+     * This method does not throw exceptions. Exceptions thrown by any of the interceptors in the chain are logged, but not propagated.
+     *
+     * @param offsets A map of offsets by partition with associated metadata
+     */
+    public void preCommit(Consumer consumer, Map<TopicPartition, OffsetAndMetadata> offsets) {
+        for (ConsumerInterceptor<K, V> interceptor : this.interceptors) {
+            try {
+                interceptor.preCommit(consumer, offsets);
+            } catch (Exception e) {
+                // do not propagate interceptor exception, just log
+                log.warn("Error executing interceptor preCommit callback", e);
+            }
+        }
+    }
+
+    /**
+     * This is called after commit request returns successfully from the broker.
      * <p>
      * This method calls {@link ConsumerInterceptor#onCommit(Map)} method for each interceptor.
      * <p>
